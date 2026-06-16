@@ -136,6 +136,9 @@ const LS = {
   }
 };
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+// Credits live in memory (works even when browser storage is blocked, e.g. previews),
+// and are mirrored to localStorage so they survive a reload when storage is available.
+let CREDITS = LS.get("sift.credits", 0);
 function blankChat() {
   return {
     id: uid(),
@@ -191,6 +194,8 @@ function App() {
   const [gate, setGate] = useState(null); // null | "capped"
   const [view, setView] = useState("app"); // "app" | "plans"
   const [drawer, setDrawer] = useState(false); // history drawer open?
+  const [credits, setCredits] = useState(CREDITS); // reactive copy for display
+  const [purchased, setPurchased] = useState(false); // show purchase-success popup
   const feedRef = useRef(null);
   const active = chats.find(c => c.id === activeId) || chats[0];
   const turns = active ? active.turns : [];
@@ -216,15 +221,19 @@ function App() {
 
   // 0 free real searches. Real searches need a paid pass (credits). The free
   // examples (chips) are canned demos and don't count or call the API.
+  function syncCredits() { LS.set("sift.credits", CREDITS); setCredits(CREDITS); }
   function hasPass() {
-    return LS.get("sift.credits", 0) > 0;
+    return CREDITS > 0;
   }
   function spendCredit() {
-    LS.set("sift.credits", Math.max(0, LS.get("sift.credits", 0) - 1));
+    CREDITS = Math.max(0, CREDITS - 1);
+    syncCredits();
   }
   function grantCredits(n) {
-    LS.set("sift.credits", LS.get("sift.credits", 0) + n);
+    CREDITS = CREDITS + n;
+    syncCredits();
     setView("app");
+    setPurchased(true);
   }
 
   // Show a canned sample result for a free example — no API call, no cost.
@@ -496,7 +505,12 @@ function App() {
     className: "brand"
   }, "Sift", /*#__PURE__*/React.createElement("span", {
     className: "dot"
-  }, ".")))), /*#__PURE__*/React.createElement("button", {
+  }, ".")))), /*#__PURE__*/React.createElement("div", {
+    className: "head-actions"
+  }, credits > 0 && /*#__PURE__*/React.createElement("span", {
+    className: "credits-pill",
+    title: "Searches left"
+  }, credits, " left"), /*#__PURE__*/React.createElement("button", {
     className: "ghost",
     onClick: goHome,
     title: "New search"
@@ -509,7 +523,7 @@ function App() {
     strokeLinejoin: "round"
   }, /*#__PURE__*/React.createElement("path", {
     d: "M12 5v14M5 12h14"
-  })), /*#__PURE__*/React.createElement("span", null, "New"))), /*#__PURE__*/React.createElement("div", {
+  })), /*#__PURE__*/React.createElement("span", null, "New")))), /*#__PURE__*/React.createElement("div", {
     className: "rule"
   }), turns.length === 0 && /*#__PURE__*/React.createElement("div", {
     className: "hero"
@@ -703,7 +717,20 @@ function App() {
     strokeLinejoin: "round"
   }, /*#__PURE__*/React.createElement("path", {
     d: "M12 2l2.6 6.3 6.8.5-5.2 4.4 1.6 6.6L12 17l-5.8 3.3 1.6-6.6L2.6 8.8l6.8-.5z"
-  })), "Buy a membership")));
+  })), "Buy a membership")), purchased && /*#__PURE__*/React.createElement("div", {
+    className: "modal-overlay",
+    onClick: () => setPurchased(false)
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "modal",
+    onClick: e => e.stopPropagation()
+  }, /*#__PURE__*/React.createElement("div", {
+    className: "modal-check"
+  }, "\u2713"), /*#__PURE__*/React.createElement("div", {
+    className: "modal-title"
+  }, "Purchase successful"), /*#__PURE__*/React.createElement("button", {
+    className: "modal-btn",
+    onClick: () => setPurchased(false)
+  }, "Click here to use your credits"))));
 }
 function Result({
   data
@@ -731,19 +758,14 @@ function Result({
     className: "rows"
   }, retailers.map((r, i) => {
     const best = !!r.cheapest || i === 0 && !retailers.some(x => x.cheapest);
-    const Tag = r.url ? "a" : "div";
-    const props = r.url ? {
-      href: r.url,
-      target: "_blank",
-      rel: "noopener noreferrer"
-    } : {};
-    return /*#__PURE__*/React.createElement(Tag, _extends({
+    const link = r.url || ("https://www.google.com/search?q=" + encodeURIComponent(data.item + " " + r.name));
+    return /*#__PURE__*/React.createElement("div", {
       className: "row" + (best ? " best" : ""),
       key: i,
       style: {
         animationDelay: i * 60 + "ms"
       }
-    }, props), /*#__PURE__*/React.createElement("div", {
+    }, /*#__PURE__*/React.createElement("div", {
       className: "rank"
     }, RANKS[i] || i + 1 + "th"), /*#__PURE__*/React.createElement("div", {
       className: "info"
@@ -761,8 +783,12 @@ function Result({
       className: "cur"
     }, s) : /*#__PURE__*/React.createElement("span", {
       className: "cur"
-    }, cur, " "), r.price), /*#__PURE__*/React.createElement("svg", {
-      className: "go",
+    }, cur, " "), r.price), /*#__PURE__*/React.createElement("a", {
+      className: "visit",
+      href: link,
+      target: "_blank",
+      rel: "noopener noreferrer"
+    }, "Visit", /*#__PURE__*/React.createElement("svg", {
       viewBox: "0 0 24 24",
       fill: "none",
       stroke: "currentColor",
@@ -771,7 +797,7 @@ function Result({
       strokeLinejoin: "round"
     }, /*#__PURE__*/React.createElement("path", {
       d: "M7 17L17 7M9 7h8v8"
-    })));
+    }))));
   })), Array.isArray(data.tips) && data.tips.length > 0 && /*#__PURE__*/React.createElement("div", {
     className: "tips"
   }, /*#__PURE__*/React.createElement("div", {
